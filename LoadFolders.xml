@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<loadFolders>
+  <v1.7>
+    <li>Common</li>
+    <li>1.7</li>
+  </v1.7>
+  <!-- 1.4 to 1.6 just replace the vanilla portraits, no options -->
+  <v1.6>
+    <li>Legacy</li>
+  </v1.6>
+  <v1.5>
+    <li>Legacy</li>
+  </v1.5>
+  <v1.4>
+    <li>Legacy</li>
+  </v1.4>
+</loadFolders>

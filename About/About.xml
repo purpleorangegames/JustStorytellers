@@ -1,12 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ModMetaData>
-    <name>JustStorytellers</name>
-    <packageId>tiagocc0.JustStorytellers</packageId>
-    <author>tiagocc0</author>
-    <modVersion>1.0</modVersion>
-    <supportedVersions>
-        <li>1.4</li>
-        <li>1.5</li>
-    </supportedVersions>
-    <description>A retexture of our beloved storytellers, using AI and some retouch here and there.</description>
+  <name>JustStorytellers</name>
+  <author>tiagocc0</author>
+  <packageId>tiagocc0.JustStorytellers</packageId>
+  <modVersion>2.0.0</modVersion>
+  <url>https://github.com/purpleorangegames/JustStorytellers</url>
+  <supportedVersions>
+    <li>1.4</li>
+    <li>1.5</li>
+    <li>1.6</li>
+    <li>1.7</li>
+  </supportedVersions>
+  <description>A retexture of our beloved storytellers, using AI and some retouch here and there.
+On 1.7 there is also an alternative version of each one, and in the mod settings you can choose for each storyteller between this one, the alternative or vanilla.
+
+Non Steam version: https://github.com/purpleorangegames/JustStorytellers</description>
 </ModMetaData>
