@@ -192,8 +192,8 @@ public class JustStorytellersMod : Mod
 
         List<(string title, List<string> items, string empty)> groups = new List<(string, List<string>, string)>
         {
-            ("JustStorytellers", Portraits.JsFiles.Select(f => Sources.JsPrefix + f).ToList(), null),
-            ("Other storytellers", Portraits.Tellers.Where(d => d != selected).Select(d => Portraits.TellerPrefix + d.defName).ToList(), null),
+            (selected.LabelCap, Portraits.OwnOptions(selected).ToList(), null),
+            ("Other storytellers", Portraits.Tellers.Where(d => d != selected).SelectMany(Portraits.OtherOptions).ToList(), null),
             ("Your images", Portraits.OwnImages.Keys.Select(f => Portraits.OwnPrefix + f).ToList(), "Put PNG or JPG files in the folder and they show up here. 580x620 fits best.")
         };
 
@@ -264,12 +264,6 @@ public static class Portraits
     public const string JsPrefix = Sources.JsPrefix;
     public const string OwnPrefix = Sources.OwnPrefix;
 
-    public static readonly List<string> JsFiles = new List<string>
-    {
-        "CassandraClassic", "CassandraClassicAlt",
-        "PhoebeFriendly", "PhoebeFriendlyAlt",
-        "RandyRandom", "RandyRandomAlt"
-    };
 
     public static readonly List<StorytellerDef> Tellers = new List<StorytellerDef>();
     static readonly Dictionary<StorytellerDef, (Texture2D large, Texture2D tiny)> originals = new Dictionary<StorytellerDef, (Texture2D, Texture2D)>();
@@ -296,6 +290,39 @@ public static class Portraits
         foreach (StorytellerDef def in Tellers)
         {
             Apply(def);
+        }
+    }
+
+    // what a storyteller can use from itself: its own portrait and our art for it
+    public static IEnumerable<string> OwnOptions(StorytellerDef def)
+    {
+        yield return Self;
+        foreach (string js in JsOptions(def))
+        {
+            yield return js;
+        }
+    }
+
+    // what other storytellers can borrow from this one
+    public static IEnumerable<string> OtherOptions(StorytellerDef def)
+    {
+        if (originals.TryGetValue(def, out var o) && o.large != null)
+        {
+            yield return TellerPrefix + def.defName;
+        }
+        foreach (string js in JsOptions(def))
+        {
+            yield return js;
+        }
+    }
+
+    static IEnumerable<string> JsOptions(StorytellerDef def)
+    {
+        string file = Sources.OurFile(def.defName);
+        if (file != null)
+        {
+            yield return JsPrefix + file;
+            yield return JsPrefix + file + "Alt";
         }
     }
 
@@ -367,7 +394,7 @@ public static class Portraits
         {
             return source.Substring(OwnPrefix.Length);
         }
-        return "its own";
+        return "Its own";
     }
 
     public static void RefreshOwnImages()
