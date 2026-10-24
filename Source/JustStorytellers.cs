@@ -19,6 +19,9 @@ public class JustStorytellersSettings : ModSettings
     // own file name -> where its small portrait is cut from, "centerX centerY width" as parts of the image
     public Dictionary<string, string> crops = new Dictionary<string, string>();
 
+    // hides the six pictures of this mod from the choices
+    public bool hideOurArt;
+
     public string Get(string defName) => sources.TryGetValue(defName, out string s) ? s : Sources.DefaultSource(defName);
 
     public override void ExposeData()
@@ -57,6 +60,7 @@ public class JustStorytellersSettings : ModSettings
         }
         Scribe_Collections.Look(ref crops, "crops", LookMode.Value, LookMode.Value);
         crops ??= new Dictionary<string, string>();
+        Scribe_Values.Look(ref hideOurArt, "hideOurArt", false);
     }
 }
 
@@ -123,9 +127,10 @@ public class JustStorytellersMod : Mod
             selected = tellers[0];
         }
 
-        Rect left = new Rect(inRect.x, inRect.y, 210f, inRect.height);
+        Rect left = new Rect(inRect.x, inRect.y, 210f, inRect.height - 34f);
         Rect right = new Rect(left.xMax + 16f, inRect.y, inRect.width - left.width - 16f, inRect.height);
         DrawList(left, tellers);
+        Widgets.CheckboxLabeled(new Rect(left.x, left.yMax + 8f, left.width, 26f), "Hide this mod alt images", ref settings.hideOurArt);
         DrawChoices(right);
     }
 
@@ -401,7 +406,7 @@ public static class Portraits
     static IEnumerable<string> JsOptions(StorytellerDef def)
     {
         string file = Sources.OurFile(def.defName);
-        if (file != null)
+        if (file != null && !JustStorytellersMod.settings.hideOurArt)
         {
             yield return JsPrefix + file;
             yield return JsPrefix + file + "Alt";
