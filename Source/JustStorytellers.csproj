@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>JustStorytellers</AssemblyName>
     <RootNamespace>JustStorytellers</RootNamespace>
-    <Version>2.0.0</Version>
+    <Version>2.1.0</Version>
     <Authors>tiagocc0</Authors>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
