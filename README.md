@@ -4,6 +4,7 @@ A retexture of our beloved storytellers, using AI and some retouch here and ther
 On 1.7 there is also an alternative version of each one.
 In the mod settings you can change the portrait of any storyteller, even ones from other mods. You can pick this art, the portrait of another storyteller or your own images.
 For your own images, put PNG or JPG files in the JustStorytellers folder inside the RimWorld save folder, there is a button to open it. 580x620 fits best.
+You can also pick which part of your image is used for the small portrait.
 
 Steam version: https://steamcommunity.com/sharedfiles/filedetails/?id=3217699484
 

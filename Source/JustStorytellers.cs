@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using RimWorld;
@@ -14,6 +15,9 @@ public class JustStorytellersSettings : ModSettings
     // storyteller defName -> source, missing means the default (our art for the vanilla three, its own for the rest)
     // sources: "self", "teller:<defName>", "js:<file>", "own:<file name>"
     public Dictionary<string, string> sources = new Dictionary<string, string>();
+
+    // own file name -> where its small portrait is cut from, "centerX centerY width" as parts of the image
+    public Dictionary<string, string> crops = new Dictionary<string, string>();
 
     public string Get(string defName) => sources.TryGetValue(defName, out string s) ? s : Sources.DefaultSource(defName);
 
@@ -51,6 +55,8 @@ public class JustStorytellersSettings : ModSettings
                 sources[pair.Key] = pair.Value;
             }
         }
+        Scribe_Collections.Look(ref crops, "crops", LookMode.Value, LookMode.Value);
+        crops ??= new Dictionary<string, string>();
     }
 }
 
@@ -87,6 +93,9 @@ public class JustStorytellersMod : Mod
     Vector2 listScroll;
     Vector2 choiceScroll;
     int lastDrawFrame = -10;
+    string dragFile;
+    Vector2 dragOffset;
+    Vector3 dragCrop;
 
     public JustStorytellersMod(ModContentPack content) : base(content)
     {
@@ -158,20 +167,31 @@ public class JustStorytellersMod : Mod
     {
         string current = settings.Get(selected.defName);
 
+        // own images get a bigger picture to pick the small portrait from
+        string ownFile = current.StartsWith(Sources.OwnPrefix) ? current.Substring(Sources.OwnPrefix.Length) : null;
+        Texture2D ownTex = null;
+        bool cropping = ownFile != null && Portraits.OwnImages.TryGetValue(ownFile, out ownTex);
+
         // current portrait
-        Rect portrait = new Rect(rect.x, rect.y, 145f, 155f);
+        Rect portrait = cropping ? new Rect(rect.x, rect.y, 220f, 235f) : new Rect(rect.x, rect.y, 145f, 155f);
         Widgets.DrawBoxSolid(portrait, new Color(1f, 1f, 1f, 0.05f));
-        if (selected.portraitLargeTex != null)
+        if (cropping)
+        {
+            // stretched like the game draws it
+            GUI.DrawTexture(portrait, ownTex);
+        }
+        else if (selected.portraitLargeTex != null)
         {
             GUI.DrawTexture(portrait, selected.portraitLargeTex, ScaleMode.ScaleToFit);
         }
         Widgets.DrawBox(portrait);
 
         float x = portrait.xMax + 16f;
+        float textWidth = rect.xMax - x - (cropping ? 140f : 0f);
         Text.Font = GameFont.Medium;
-        Widgets.Label(new Rect(x, rect.y, rect.xMax - x, 34f), selected.LabelCap);
+        Widgets.Label(new Rect(x, rect.y, textWidth, 34f), selected.LabelCap);
         Text.Font = GameFont.Small;
-        Widgets.Label(new Rect(x, rect.y + 38f, rect.xMax - x, 24f), "Using: " + Portraits.Label(current));
+        Widgets.Label(new Rect(x, rect.y + 38f, textWidth, 24f), "Using: " + Portraits.Label(current));
         if (Widgets.ButtonText(new Rect(x, rect.y + 70f, 160f, 32f), "Back to its own"))
         {
             Choose(Sources.Self);
@@ -179,6 +199,15 @@ public class JustStorytellersMod : Mod
         if (Widgets.ButtonText(new Rect(x, rect.y + 110f, 160f, 32f), "Open folder"))
         {
             Portraits.OpenOwnFolder();
+        }
+        if (cropping)
+        {
+            DrawCrop(portrait, new Rect(rect.xMax - 126f, rect.y + 30f, 122f, 130f), ownFile, ownTex);
+            GUI.color = Color.gray;
+            Text.Font = GameFont.Tiny;
+            Widgets.Label(new Rect(x, rect.y + 152f, textWidth, 60f), "Click or drag on the picture to pick the small portrait. Scroll on it to change the size.");
+            Text.Font = GameFont.Small;
+            GUI.color = Color.white;
         }
 
         // choices
@@ -242,6 +271,55 @@ public class JustStorytellersMod : Mod
         Widgets.EndScrollView();
     }
 
+    void DrawCrop(Rect box, Rect preview, string file, Texture2D tex)
+    {
+        Vector3 crop = dragFile == file ? dragCrop : Portraits.GetCrop(file, tex);
+        Rect r = Portraits.CropRect(tex, crop);
+        Rect square = new Rect(box.x + r.x * box.width, box.y + r.y * box.height, r.width * box.width, r.height * box.height);
+
+        Event e = Event.current;
+        Vector2 mouse = e.mousePosition;
+        if (e.type == EventType.MouseDown && e.button == 0 && box.Contains(mouse))
+        {
+            // grabbing the square keeps it under the mouse, clicking elsewhere centers it there
+            dragFile = file;
+            dragOffset = square.Contains(mouse) ? square.center - mouse : Vector2.zero;
+            e.Use();
+        }
+        if (dragFile == file)
+        {
+            Vector2 center = mouse + dragOffset;
+            crop = Portraits.ClampCrop(tex, new Vector3((center.x - box.x) / box.width, (center.y - box.y) / box.height, crop.z));
+            dragCrop = crop;
+            if (e.rawType == EventType.MouseUp || !Input.GetMouseButton(0))
+            {
+                dragFile = null;
+                Portraits.SetCrop(file, crop);
+            }
+        }
+        else if (e.type == EventType.ScrollWheel && box.Contains(mouse))
+        {
+            crop.z *= 1f + e.delta.y * 0.03f;
+            Portraits.SetCrop(file, crop);
+            crop = Portraits.GetCrop(file, tex);
+            e.Use();
+        }
+
+        r = Portraits.CropRect(tex, crop);
+        square = new Rect(box.x + r.x * box.width, box.y + r.y * box.height, r.width * box.width, r.height * box.height);
+        GUI.color = Color.black;
+        Widgets.DrawBox(square.ExpandedBy(1f), 1);
+        GUI.color = Color.white;
+        Widgets.DrawBox(square, 2);
+
+        Text.Anchor = TextAnchor.UpperCenter;
+        Widgets.Label(new Rect(preview.x - 20f, preview.y - 26f, preview.width + 40f, 24f), "Small portrait");
+        Text.Anchor = TextAnchor.UpperLeft;
+        Widgets.DrawBoxSolid(preview, new Color(1f, 1f, 1f, 0.05f));
+        GUI.DrawTextureWithTexCoords(preview, tex, new Rect(r.x, 1f - r.y - r.height, r.width, r.height));
+        Widgets.DrawBox(preview);
+    }
+
     void Choose(string source)
     {
         if (source == Sources.DefaultSource(selected.defName))
@@ -271,6 +349,10 @@ public static class Portraits
     // own file name -> texture, sorted by name
     public static readonly SortedDictionary<string, Texture2D> OwnImages = new SortedDictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
     static readonly Dictionary<string, DateTime> ownTimes = new Dictionary<string, DateTime>();
+    static readonly Dictionary<string, Texture2D> ownTiny = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
+
+    // around the face on a portrait like the vanilla ones
+    static readonly Vector3 defaultCrop = new Vector3(0.5f, 0.3f, 0.42f);
 
     public static string OwnFolder => Path.Combine(GenFilePaths.SaveDataFolderPath, "JustStorytellers");
 
@@ -366,7 +448,7 @@ public static class Portraits
                 return false;
             }
             large = tex;
-            tiny = tex;
+            tiny = ownTiny.TryGetValue(source.Substring(OwnPrefix.Length), out Texture2D small) ? small : tex;
             return true;
         }
         if (originals.TryGetValue(def, out var mine))
@@ -431,6 +513,7 @@ public static class Portraits
                     tex.name = Path.GetFileNameWithoutExtension(name);
                     tex.wrapMode = TextureWrapMode.Clamp;
                     OwnImages[name] = tex;
+                    BuildTiny(name, tex, GetCrop(name, tex));
                 }
             }
         }
@@ -443,6 +526,7 @@ public static class Portraits
         foreach (string name in ownTimes.Keys.Where(n => !found.Contains(n)).ToList())
         {
             changed |= OwnImages.Remove(name);
+            ownTiny.Remove(name);
             ownTimes.Remove(name);
         }
         // an image in use may have changed or gone away
@@ -455,6 +539,108 @@ public static class Portraits
                     Apply(def);
                 }
             }
+        }
+    }
+
+    // height of the small portrait as a part of the image, for each part of its width
+    static float CropAspect(Texture2D tex) => Storyteller.PortraitSizeTiny.y / Storyteller.PortraitSizeTiny.x * tex.width / tex.height;
+
+    public static Rect CropRect(Texture2D tex, Vector3 crop)
+    {
+        float h = crop.z * CropAspect(tex);
+        return new Rect(crop.x - crop.z / 2f, crop.y - h / 2f, crop.z, h);
+    }
+
+    public static Vector3 ClampCrop(Texture2D tex, Vector3 crop)
+    {
+        float aspect = CropAspect(tex);
+        float w = Mathf.Clamp(crop.z, 0.05f, Mathf.Min(1f, 1f / aspect));
+        float h = w * aspect;
+        return new Vector3(Mathf.Clamp(crop.x, w / 2f, 1f - w / 2f), Mathf.Clamp(crop.y, h / 2f, 1f - h / 2f), w);
+    }
+
+    public static Vector3 GetCrop(string file, Texture2D tex)
+    {
+        Vector3 crop = defaultCrop;
+        if (JustStorytellersMod.settings.crops.TryGetValue(file, out string saved))
+        {
+            string[] parts = saved.Split(' ');
+            if (parts.Length == 3
+                && float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float cx)
+                && float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float cy)
+                && float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float w))
+            {
+                crop = new Vector3(cx, cy, w);
+            }
+        }
+        return ClampCrop(tex, crop);
+    }
+
+    public static void SetCrop(string file, Vector3 crop)
+    {
+        if (!OwnImages.TryGetValue(file, out Texture2D tex))
+        {
+            return;
+        }
+        crop = ClampCrop(tex, crop);
+        JustStorytellersMod.settings.crops[file] = string.Format(CultureInfo.InvariantCulture, "{0} {1} {2}", crop.x, crop.y, crop.z);
+        BuildTiny(file, tex, crop);
+    }
+
+    // cuts the small portrait out of the image, the same texture is reused so it updates everywhere
+    static void BuildTiny(string file, Texture2D tex, Vector3 crop)
+    {
+        int w = (int)Storyteller.PortraitSizeTiny.x;
+        int h = (int)Storyteller.PortraitSizeTiny.y;
+        try
+        {
+            Rect r = CropRect(tex, crop);
+            int sw = Mathf.Clamp(Mathf.RoundToInt(r.width * tex.width), 1, tex.width);
+            int sh = Mathf.Clamp(Mathf.RoundToInt(r.height * tex.height), 1, tex.height);
+            int sx = Mathf.Clamp(Mathf.RoundToInt(r.x * tex.width), 0, tex.width - sw);
+            // pixels go bottom up
+            int sy = Mathf.Clamp(tex.height - Mathf.RoundToInt(r.y * tex.height) - sh, 0, tex.height - sh);
+            Color[] src = tex.GetPixels(sx, sy, sw, sh);
+            Color[] dst = new Color[w * h];
+            for (int y = 0; y < h; y++)
+            {
+                int y0 = y * sh / h;
+                int y1 = Math.Max(y0 + 1, (y + 1) * sh / h);
+                for (int x = 0; x < w; x++)
+                {
+                    int x0 = x * sw / w;
+                    int x1 = Math.Max(x0 + 1, (x + 1) * sw / w);
+                    // averaged with alpha weight so transparent edges don't bleed
+                    float red = 0f, green = 0f, blue = 0f, alpha = 0f;
+                    for (int yy = y0; yy < y1; yy++)
+                    {
+                        for (int xx = x0; xx < x1; xx++)
+                        {
+                            Color c = src[yy * sw + xx];
+                            red += c.r * c.a;
+                            green += c.g * c.a;
+                            blue += c.b * c.a;
+                            alpha += c.a;
+                        }
+                    }
+                    int count = (y1 - y0) * (x1 - x0);
+                    dst[y * w + x] = alpha > 0f ? new Color(red / alpha, green / alpha, blue / alpha, alpha / count) : Color.clear;
+                }
+            }
+            if (!ownTiny.TryGetValue(file, out Texture2D tiny))
+            {
+                tiny = new Texture2D(w, h, TextureFormat.RGBA32, false);
+                tiny.name = tex.name + "Tiny";
+                tiny.wrapMode = TextureWrapMode.Clamp;
+                ownTiny[file] = tiny;
+            }
+            tiny.SetPixels(dst);
+            tiny.Apply(false);
+        }
+        catch (Exception e)
+        {
+            Log.Warning("[JustStorytellers] Could not make the small portrait of " + file + ": " + e.Message);
+            ownTiny.Remove(file);
         }
     }
 
